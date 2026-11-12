@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Registrar Paquetes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; padding: 16px; margin: 0; background: #f8f9fa; }
+
+    .label { font-size: 11px; font-weight: bold; color: #444; margin-bottom: 4px; text-transform: uppercase; }
+
+    select, input[type=text] {
+      width: 100%; padding: 10px; margin-bottom: 14px;
+      border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
+      background: white;
+    }
+    select:focus, input[type=text]:focus {
+      outline: none; border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,.2);
+    }
+
+    .btn {
+      width: 100%; padding: 11px; border: none; border-radius: 6px;
+      font-size: 14px; font-weight: bold; cursor: pointer; margin-bottom: 8px;
+    }
+    .btn-green { background: #1a6b2e; color: white; }
+    .btn-green:hover { background: #155a26; }
+    .btn-red   { background: #b71c1c; color: white; }
+    .btn-red:hover { background: #9a1515; }
+    .btn-gray  { background: #e0e0e0; color: #333; }
+    .btn-gray:hover { background: #bdbdbd; }
+    .btn-blue  { background: #0b57d0; color: white; }
+    .btn-blue:hover { background: #0842a0; }
+
+    .cam-row { display: flex; gap: 8px; }
+    .cam-row .btn { flex: 1; }
+
+    #lector-camara { width: 100%; margin-bottom: 8px; display: none; border-radius: 6px; overflow: hidden; }
+    #btnDetener { display: none; }
+
+    .counter {
+      text-align: center; margin: 14px 0 10px;
+      font-size: 32px; font-weight: bold; color: #1a73e8;
+    }
+    .counter span { display: block; font-size: 11px; color: #595959; font-weight: normal; }
+
+    .msg {
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 10px;
+      font-size: 13px; text-align: center; display: none;
+    }
+    .msg.ok   { background: #e6f4ea; color: #1e6d38; display: block; }
+    .msg.err  { background: #fce8e6; color: #a50e0e; display: block; }
+    .msg.warn { background: #fff8e1; color: #795548; display: block; }
+
+    .confirm-box {
+      background: #fff8e1; border: 1px solid #f9a825; border-radius: 8px;
+      padding: 12px; margin-bottom: 12px; display: none;
+    }
+    .confirm-box p { margin: 0 0 10px; font-size: 13px; color: #333; }
+    .confirm-row { display: flex; gap: 8px; }
+    .confirm-row .btn { margin-bottom: 0; flex: 1; }
+
+    .last { font-size: 11px; color: #595959; word-break: break-all; text-align: center; margin-top: 4px; }
+    .divider { border: none; border-top: 1px solid #e0e0e0; margin: 14px 0; }
+  </style>
+
+  <!-- Librería html5-qrcode (URL completa) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+</head>
+<body>
+
+  <!-- ===== PANTALLA DE ACCESO ===== -->
+  <div id="login" style="display:none">
+    <div class="label">Clave de acceso</div>
+    <input type="password" id="inputClave" placeholder="Escribe la clave" autocomplete="current-password"
+           onkeydown="if (event.key === 'Enter') entrar()">
+    <button class="btn btn-green" onclick="entrar()">Entrar</button>
+    <div id="msgLogin" class="msg"></div>
+  </div>
+
+  <!-- ===== APLICACIÓN ===== -->
+  <div id="app" style="display:none">
+
+  <div class="label">Motorizado</div>
+  <select id="motorizado" onchange="onSelectMotorizado()">
+    <option value="">— Seleccionar —</option>
+  </select>
+
+  <div class="label">Tracking (escanear o escribir)</div>
+
+  <div class="cam-row">
+    <button type="button" class="btn btn-blue" onclick="iniciarCamara()">📷 Cámara en vivo</button>
+    <button type="button" class="btn btn-blue" onclick="abrirFoto()">🖼️ Tomar foto</button>
+  </div>
+  <!-- Respaldo: abre la cámara nativa del celular y lee el código desde la foto -->
+  <input type="file" id="inputFoto" accept="image/*" capture="environment" style="display:none" onchange="leerFoto(event)">
+
+  <div id="lector-camara"></div>
+  <button type="button" id="btnDetener" class="btn btn-gray" onclick="detenerCamara()">✕ Cerrar cámara</button>
+
+  <input type="text" id="tracking" placeholder="Apunta la pistola y escanea..." onkeydown="onKey(event)" autocomplete="off">
+
+  <button class="btn btn-green" onclick="registrar()">✓ Registrar paquete</button>
+
+  <div class="confirm-box" id="confirmBox">
+    <p id="confirmMsg"></p>
+    <div class="confirm-row">
+      <button class="btn btn-gray" onclick="cancelarConfirm()">Cancelar</button>
+      <button class="btn btn-red" onclick="confirmarReasignar()">Sí, reasignar</button>
+    </div>
+  </div>
+
+  <div class="counter" id="cnt">0 <span>paquetes registrados</span></div>
+  <div class="last" id="last"></div>
+  <div id="msg" class="msg"></div>
+
+  <hr class="divider">
+  <button class="btn btn-red" onclick="nuevaSesion()">↺ Nueva sesión / Cambiar motorizado</button>
+  <button class="btn btn-gray" onclick="salir()">🔒 Cerrar sesión en este celular</button>
+
+  </div> <!-- fin #app -->
+
+  <!-- Elemento oculto que usa la librería para leer fotos -->
+  <div id="lector-foto" style="display:none"></div>
+
+  <script>
+    // ================= CONFIGURACIÓN =================
+    // URL de tu aplicación web de Apps Script (la que termina en /exec)
+    var API_URL = 'PEGA_AQUI_TU_URL_EXEC';
+    // La clave NO va aquí: cada persona la escribe al entrar y se guarda en su celular.
+    var CLAVE = '';
+
+    function leerClaveGuardada() {
+      try { return localStorage.getItem('claveScanner') || ''; } catch (e) { return ''; }
+    }
+    function guardarClave(c) {
+      try { localStorage.setItem('claveScanner', c); } catch (e) {}
+    }
+    function borrarClave() {
+      try { localStorage.removeItem('claveScanner'); } catch (e) {}
+    }
+
+    function mostrarLogin(mensaje) {
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('login').style.display = 'block';
+      var m = document.getElementById('msgLogin');
+      if (mensaje) { m.textContent = mensaje; m.className = 'msg err'; } else { m.className = 'msg'; }
+      document.getElementById('inputClave').focus();
+    }
+
+    // Prueba la clave pidiendo la lista de motorizados
+    function iniciarConClave(clave, desdeLogin) {
+      CLAVE = clave;
+      return api('motorizados').then(function (r) {
+        if (r.error) {
+          borrarClave();
+          mostrarLogin(desdeLogin ? 'Clave incorrecta' : '');
+          return;
+        }
+        guardarClave(clave);
+        cargarMotorizados(r.data);
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('motorizado').focus();
+      }).catch(function () {
+        mostrarLogin('No se pudo conectar. Revisa tu internet.');
+      });
+    }
+
+    function entrar() {
+      var c = document.getElementById('inputClave').value.trim();
+      if (!c) return;
+      document.getElementById('msgLogin').className = 'msg';
+      iniciarConClave(c, true);
+    }
+
+    function salir() {
+      detenerCamara();
+      borrarClave();
+      CLAVE = '';
+      document.getElementById('inputClave').value = '';
+      mostrarLogin('');
+    }
+
+    // Envía una acción a Apps Script y devuelve la respuesta (JSON)
+    function api(accion, datos) {
+      var cuerpo = Object.assign({ accion: accion, clave: CLAVE }, datos || {});
+      return fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita bloqueo CORS
+        body: JSON.stringify(cuerpo)
+      }).then(function (res) { return res.json(); });
+    }
+
+    var count = 0;
+    var pendingTracking = '';
+
+    // ================= CÁMARA =================
+    var scanner = null;
+    var camaraActiva = false;
+    var leyendo = false;   // true mientras se guarda un paquete
+    var ultimoCodigo = '';
+    var ultimoTiempo = 0;
+
+    // Deja la cámara lista para leer el siguiente código
+    function liberarLector() { leyendo = false; }
+
+    // En celular, enfocar el campo abre el teclado y tapa la cámara
+    function enfocarTracking() {
+      if (!camaraActiva) document.getElementById('tracking').focus();
+    }
+
+    function formatos() {
+      var F = Html5QrcodeSupportedFormats;
+      return [F.CODE_128, F.CODE_39, F.CODE_93, F.EAN_13, F.EAN_8,
+              F.UPC_A, F.UPC_E, F.ITF, F.CODABAR, F.QR_CODE, F.DATA_MATRIX, F.PDF_417];
+    }
+
+    function librariaCargada() {
+      if (typeof Html5Qrcode === 'undefined') {
+        mostrarMsg('No se pudo cargar el lector. Revisa tu conexión a internet.', 'err');
+        return false;
+      }
+      return true;
+    }
+
+    function iniciarCamara() {
+      if (!librariaCargada() || camaraActiva) return;
+
+      var visor = document.getElementById('lector-camara');
+      visor.style.display = 'block';
+      document.getElementById('btnDetener').style.display = 'block';
+
+      if (!scanner) {
+        scanner = new Html5Qrcode('lector-camara', {
+          formatsToSupport: formatos(),
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+          verbose: false
+        });
+      }
+
+      var config = { fps: 10, qrbox: { width: 260, height: 120 } };
+      leyendo = false;
+
+      scanner.start({ facingMode: 'environment' }, config, function (codigo) {
+        codigo = codigo.trim();
+        // Ocupado guardando el anterior, o es el mismo paquete aún frente a la cámara
+        if (leyendo) return;
+        if (codigo === ultimoCodigo && Date.now() - ultimoTiempo < 4000) return;
+
+        leyendo = true;
+        ultimoCodigo = codigo;
+        ultimoTiempo = Date.now();
+        if (navigator.vibrate) navigator.vibrate(150);
+        document.getElementById('tracking').value = codigo;
+        registrar(); // la cámara sigue abierta para el siguiente paquete
+      }, function () { /* sin código en este frame: ignorar */ })
+      .then(function () {
+        camaraActiva = true;
+      })
+      .catch(function (err) {
+        visor.style.display = 'none';
+        document.getElementById('btnDetener').style.display = 'none';
+        var detalle = (err && (err.name || err.message)) ? (err.name + ': ' + err.message) : String(err);
+        var causa;
+        if (!window.isSecureContext) {
+          causa = 'La página no está en HTTPS.';
+        } else if (/policy|feature/i.test(detalle)) {
+          causa = 'Google no deja usar la cámara dentro de esta página (bloqueo del marco).';
+        } else if (/NotAllowed|Permission/i.test(detalle)) {
+          causa = 'Permiso de cámara bloqueado. Toca el candado de la barra de direcciones → Permisos → Cámara → Permitir, y recarga.';
+        } else if (/NotFound|Overconstrained/i.test(detalle)) {
+          causa = 'No se encontró una cámara trasera.';
+        } else if (/NotReadable|in use/i.test(detalle)) {
+          causa = 'Otra app está usando la cámara. Ciérrala y vuelve a intentar.';
+        } else {
+          causa = 'No se pudo abrir la cámara.';
+        }
+        mostrarMsg(causa + ' [' + detalle + ']', 'err');
+      });
+    }
+
+    function detenerCamara() {
+      var visor = document.getElementById('lector-camara');
+      var ocultar = function () {
+        camaraActiva = false;
+        visor.style.display = 'none';
+        document.getElementById('btnDetener').style.display = 'none';
+      };
+      if (scanner && camaraActiva) {
+        return scanner.stop().then(ocultar).catch(ocultar);
+      }
+      ocultar();
+      return Promise.resolve();
+    }
+
+    function abrirFoto() {
+      if (!librariaCargada()) return;
+      document.getElementById('inputFoto').click();
+    }
+
+    function leerFoto(e) {
+      var archivo = e.target.files && e.target.files[0];
+      if (!archivo) return;
+      mostrarMsg('Leyendo código...', 'warn');
+
+      var lectorFoto = new Html5Qrcode('lector-foto', {
+        formatsToSupport: formatos(),
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        verbose: false
+      });
+
+      lectorFoto.scanFile(archivo, false)
+        .then(function (codigo) {
+          document.getElementById('tracking').value = codigo.trim();
+          registrar();
+        })
+        .catch(function () {
+          mostrarMsg('No se detectó el código. Acércate más y que salga nítido.', 'err');
+        })
+        .finally(function () {
+          try { lectorFoto.clear(); } catch (x) {}
+          e.target.value = ''; // permite volver a tomar otra foto
+        });
+    }
+
+    // ================= REGISTRO =================
+    function cargarMotorizados(lista) {
+      var sel = document.getElementById('motorizado');
+      sel.length = 1; // deja solo "— Seleccionar —"
+      lista.forEach(function (m) {
+        var opt = document.createElement('option');
+        opt.value = m.nombre;
+        opt.text = m.nombre + ' — ' + m.zona;
+        opt.dataset.zona = m.zona;
+        sel.appendChild(opt);
+      });
+    }
+
+    function onSelectMotorizado() {
+      enfocarTracking();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Enter') registrar();
+    }
+
+    function getZonaSeleccionada() {
+      var sel = document.getElementById('motorizado');
+      var opt = sel.options[sel.selectedIndex];
+      return opt && opt.dataset.zona ? opt.dataset.zona : '';
+    }
+
+    function registrar() {
+      var mot = document.getElementById('motorizado').value;
+      var trk = document.getElementById('tracking').value.trim();
+
+      if (!mot) { mostrarMsg('Selecciona un motorizado primero', 'err'); liberarLector(); return; }
+      if (!trk) { mostrarMsg('Escanea o escribe un tracking', 'err'); liberarLector(); return; }
+
+      document.getElementById('tracking').disabled = true;
+
+      api('registrar', { motorizado: mot, zona: getZonaSeleccionada(), tracking: trk })
+        .then(function (r) {
+          document.getElementById('tracking').disabled = false;
+
+          if (r.ok) {
+            onRegistroExitoso(trk);
+            liberarLector();
+          } else if (r.duplicate) {
+            // El lector queda en pausa hasta que elijas Cancelar o Reasignar
+            pendingTracking = trk;
+            document.getElementById('confirmMsg').textContent =
+              '⚠️ Este paquete ya está asignado a ' + r.asignadoA + '. ¿Devolver y reasignar a ' + mot + '?';
+            document.getElementById('confirmBox').style.display = 'block';
+            ocultarMsg();
+          } else if (r.error === 'Clave incorrecta') {
+            salir();
+          } else {
+            mostrarMsg(r.error || 'Error al guardar', 'err');
+            liberarLector();
+            enfocarTracking();
+          }
+        })
+        .catch(function () {
+          document.getElementById('tracking').disabled = false;
+          mostrarMsg('Error de conexión', 'err');
+          liberarLector();
+        });
+    }
+
+    function confirmarReasignar() {
+      var mot = document.getElementById('motorizado').value;
+      var trk = pendingTracking;
+
+      document.getElementById('confirmBox').style.display = 'none';
+
+      api('reasignar', { motorizado: mot, zona: getZonaSeleccionada(), tracking: trk })
+        .then(function (r) {
+          if (r.ok) {
+            onRegistroExitoso(trk);
+            mostrarMsg('↺ Reasignado a ' + mot, 'ok');
+          } else {
+            mostrarMsg(r.error || 'Error al reasignar', 'err');
+          }
+          pendingTracking = '';
+          liberarLector();
+        })
+        .catch(function () {
+          mostrarMsg('Error de conexión', 'err');
+          liberarLector();
+        });
+    }
+
+    function cancelarConfirm() {
+      pendingTracking = '';
+      document.getElementById('confirmBox').style.display = 'none';
+      document.getElementById('tracking').value = '';
+      liberarLector();
+      enfocarTracking();
+    }
+
+    function onRegistroExitoso(trk) {
+      count++;
+      document.getElementById('cnt').innerHTML = count + '<span>paquetes registrados</span>';
+      document.getElementById('last').textContent = 'Último: ' + trk;
+      document.getElementById('tracking').value = '';
+      enfocarTracking();
+      mostrarMsg('✓ Guardado', 'ok');
+    }
+
+    function nuevaSesion() {
+      detenerCamara();
+      liberarLector();
+      ultimoCodigo = '';
+      count = 0;
+      pendingTracking = '';
+      document.getElementById('cnt').innerHTML = '0<span>paquetes registrados</span>';
+      document.getElementById('motorizado').value = '';
+      document.getElementById('tracking').value = '';
+      document.getElementById('last').textContent = '';
+      document.getElementById('confirmBox').style.display = 'none';
+      ocultarMsg();
+      document.getElementById('motorizado').focus();
+    }
+
+    function mostrarMsg(txt, tipo) {
+      var el = document.getElementById('msg');
+      el.textContent = txt;
+      el.className = 'msg ' + tipo;
+      if (tipo === 'ok') setTimeout(ocultarMsg, 2000);
+    }
+
+    function ocultarMsg() {
+      document.getElementById('msg').className = 'msg';
+    }
+
+    window.onload = function () {
+      var guardada = leerClaveGuardada();
+      if (guardada) iniciarConClave(guardada, false);
+      else mostrarLogin('');
+    };
+  </script>
+</body>
+</html>
