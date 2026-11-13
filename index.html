@@ -366,6 +366,7 @@
 
           if (r.ok) {
             onRegistroExitoso(trk);
+            if (r.mensaje) mostrarMsg(r.mensaje, 'ok');
             liberarLector();
           } else if (r.duplicate) {
             // El lector queda en pausa hasta que elijas Cancelar o Reasignar
